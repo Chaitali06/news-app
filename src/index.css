@@ -398,6 +398,42 @@ button, input, select, textarea {
   border: 1px solid var(--border-color);
 }
 
+/* APK Download Action Button */
+.apk-download-nav-btn {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  text-decoration: none;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.1);
+  transition: all 0.25s ease;
+}
+
+.apk-download-nav-btn:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.22) 0%, rgba(16, 185, 129, 0.18) 100%);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.25);
+  transform: translateY(-1px);
+}
+
+.apk-download-nav-btn:hover .apk-icon-bounce {
+  animation: bounce 0.6s ease infinite alternate;
+}
+
+.mobile-apk-link {
+  background: rgba(34, 197, 94, 0.1) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.25) !important;
+  margin-top: 6px;
+  text-decoration: none;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+
 .logout-icon-btn {
   display: flex;
   align-items: center;

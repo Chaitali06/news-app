@@ -10,7 +10,7 @@ import { Radio } from 'lucide-react';
 
 // Routing content coordinator
 function AppContent() {
-  const { currentRoute, loading } = useApp();
+  const { currentRoute, loading, apkDownloadUrl } = useApp();
 
   const renderActivePage = () => {
     switch (currentRoute) {
@@ -80,7 +80,16 @@ function AppContent() {
               <ul>
                 <li>API Interface</li>
                 <li>Offline DB Status</li>
-                <li>Security Audits</li>
+                <li>
+                  <a 
+                    href={apkDownloadUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    style={{ color: '#4ade80', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    ⚡ Download APK
+                  </a>
+                </li>
               </ul>
             </div>
           </div>

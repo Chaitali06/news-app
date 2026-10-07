@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, Radio, User, LogOut, Menu, X, BookOpen, Video, PlusCircle } from 'lucide-react';
+import { Search, Radio, User, LogOut, Menu, X, BookOpen, Video, PlusCircle, Smartphone } from 'lucide-react';
 
 export default function Navigation() {
   const {
@@ -11,7 +11,8 @@ export default function Navigation() {
     activeCategory,
     setActiveCategory,
     adminUser,
-    logoutAdmin
+    logoutAdmin,
+    apkDownloadUrl
   } = useApp();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -72,6 +73,18 @@ export default function Navigation() {
           >
             <Video size={16} /> Video Hub
           </button>
+
+          {/* Download App (APK via Google link) */}
+          <a 
+            href={apkDownloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nav-link apk-download-nav-btn"
+            title="Download Android APK"
+          >
+            <Smartphone size={16} className="apk-icon-bounce" />
+            <span>Download APK</span>
+          </a>
 
           {adminUser ? (
             <div className="admin-status-nav">
@@ -150,6 +163,16 @@ export default function Navigation() {
             >
               <Video size={18} /> Video Hub
             </button>
+
+            <a 
+              href={apkDownloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mobile-drawer-link mobile-apk-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <Smartphone size={18} /> Download Android App (APK)
+            </a>
             
             <div className="drawer-divider"></div>
             

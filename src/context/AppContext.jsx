@@ -19,6 +19,22 @@ export function AppProvider({ children }) {
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Android APK Download URL (Supports Google Drive direct link or hosted link)
+  const [apkDownloadUrl, setApkDownloadUrl] = useState(() => {
+    return localStorage.getItem('chronicle_apk_url') || 'https://drive.google.com/';
+  });
+
+  const updateApkDownloadUrl = (url) => {
+    // If it's a standard Google Drive sharing link, auto-convert to direct download link
+    let finalUrl = url.trim();
+    const driveMatch = finalUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      finalUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    }
+    setApkDownloadUrl(finalUrl);
+    localStorage.setItem('chronicle_apk_url', finalUrl);
+  };
+
   // Initialize DB and Load Data
   const loadData = async () => {
     try {
@@ -186,7 +202,9 @@ export function AppProvider({ children }) {
       createVideo,
       removeVideo,
       loginAdmin,
-      logoutAdmin
+      logoutAdmin,
+      apkDownloadUrl,
+      updateApkDownloadUrl
     }}>
       {children}
     </AppContext.Provider>

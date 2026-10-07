@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   PlusCircle, Edit3, Trash2, LayoutDashboard, FileText, Video as VideoIcon, 
-  BarChart2, FilePlus, Video, LogOut, Check, AlertCircle, Info, Lock
+  BarChart2, FilePlus, Video, LogOut, Check, AlertCircle, Info, Lock, Smartphone, ExternalLink
 } from 'lucide-react';
 import Modal from '../components/Modal';
 
@@ -18,8 +18,12 @@ export default function AdminDashboard() {
     adminUser,
     loginAdmin,
     logoutAdmin,
-    navigateTo
+    navigateTo,
+    apkDownloadUrl,
+    updateApkDownloadUrl
   } = useApp();
+
+  const [apkUrlInput, setApkUrlInput] = useState(apkDownloadUrl || '');
 
   // Authentication states
   const [username, setUsername] = useState('');
@@ -93,6 +97,16 @@ export default function AdminDashboard() {
   const triggerAlert = (type, text) => {
     setAlertMessage({ type, text });
     setTimeout(() => setAlertMessage(null), 4000);
+  };
+
+  const handleSaveApkLink = (e) => {
+    e.preventDefault();
+    if (!apkUrlInput.trim()) {
+      triggerAlert('error', 'Please enter a valid Google Drive or hosted APK URL.');
+      return;
+    }
+    updateApkDownloadUrl(apkUrlInput);
+    triggerAlert('success', 'Android APK download link saved successfully!');
   };
 
   // Auth Handler
@@ -438,6 +452,44 @@ export default function AdminDashboard() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Google Drive APK Download Link Card */}
+                <div className="overview-sub-card glass-card" style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <Smartphone size={20} style={{ color: '#4ade80' }} />
+                    <h3 style={{ margin: 0 }}>Android App (APK) Download Link</h3>
+                  </div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    Paste your Google Drive link or hosted APK file link below. Google Drive sharing links will be automatically converted to 1-click direct download links.
+                  </p>
+                  
+                  <form onSubmit={handleSaveApkLink} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <input 
+                      type="url"
+                      value={apkUrlInput}
+                      onChange={(e) => setApkUrlInput(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..."
+                      className="text-input-styled"
+                      style={{ width: '100%' }}
+                      required
+                    />
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <button type="submit" className="action-btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
+                        Save Link
+                      </button>
+                      {apkDownloadUrl && (
+                        <a 
+                          href={apkDownloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ fontSize: '0.85rem', color: '#60a5fa', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                        >
+                          Test Link <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>
