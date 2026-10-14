@@ -6,11 +6,12 @@ import Home from './pages/Home';
 import ArticleDetail from './pages/ArticleDetail';
 import VideoHub from './pages/VideoHub';
 import AdminDashboard from './pages/AdminDashboard';
+import DownloadApkModal from './components/DownloadApkModal';
 import { Radio } from 'lucide-react';
 
 // Routing content coordinator
 function AppContent() {
-  const { currentRoute, loading, apkDownloadUrl } = useApp();
+  const { currentRoute, loading, apkDownloadUrl, setIsApkModalOpen } = useApp();
 
   const renderActivePage = () => {
     switch (currentRoute) {
@@ -81,14 +82,24 @@ function AppContent() {
                 <li>API Interface</li>
                 <li>Offline DB Status</li>
                 <li>
-                  <a 
-                    href={apkDownloadUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    style={{ color: '#4ade80', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  <button 
+                    type="button"
+                    onClick={() => setIsApkModalOpen(true)}
+                    style={{ 
+                      color: '#4ade80', 
+                      background: 'none', 
+                      border: 'none', 
+                      padding: 0, 
+                      cursor: 'pointer', 
+                      fontSize: 'inherit',
+                      fontFamily: 'inherit',
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '4px' 
+                    }}
                   >
                     ⚡ Download APK
-                  </a>
+                  </button>
                 </li>
               </ul>
             </div>
@@ -102,6 +113,9 @@ function AppContent() {
           </div>
         </div>
       </footer>
+
+      {/* Standalone Download APK Modal */}
+      <DownloadApkModal />
     </div>
   );
 }

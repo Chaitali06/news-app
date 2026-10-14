@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { BookOpen, Calendar, Eye, Clock, SearchX, ArrowRight, Play } from 'lucide-react';
+import { BookOpen, Calendar, Eye, Clock, SearchX, ArrowRight, Play, Smartphone, Download } from 'lucide-react';
 
 export default function Home() {
   const {
@@ -8,7 +8,8 @@ export default function Home() {
     videos,
     activeCategory,
     searchQuery,
-    navigateTo
+    navigateTo,
+    setIsApkModalOpen
   } = useApp();
 
   // Helper to format date cleanly
@@ -187,6 +188,28 @@ export default function Home() {
                 </div>
               ))}
             </div>
+          </div>
+          {/* Mobile APK Download Spotlight Widget */}
+          <div className="sidebar-widget glass-card apk-spotlight-widget">
+            <div className="apk-spotlight-header">
+              <div className="apk-badge-icon">
+                <Smartphone size={20} />
+              </div>
+              <div>
+                <h4 className="apk-spotlight-title">Chronicle Android App</h4>
+                <span className="apk-spotlight-subtitle">Direct APK Download • v1.0.0</span>
+              </div>
+            </div>
+            <p className="apk-spotlight-desc">
+              Get the native Android experience. Download directly to your browser for offline reading, zero ads, and instant breaking news.
+            </p>
+            <button 
+              type="button" 
+              className="apk-spotlight-btn"
+              onClick={() => setIsApkModalOpen(true)}
+            >
+              <Download size={15} /> Download APK (Free)
+            </button>
           </div>
         </aside>
       </div>

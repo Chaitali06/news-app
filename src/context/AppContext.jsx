@@ -19,46 +19,133 @@ export function AppProvider({ children }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Android APK Download URL (Supports Google Drive direct link or hosted link)
+  // Android APK Download URL (Defaults to local hosted APK, supports external links)
   const [apkDownloadUrl, setApkDownloadUrl] = useState(() => {
-    return localStorage.getItem('chronicle_apk_url') || 'https://drive.google.com/';
+    const saved = localStorage.getItem('chronicle_apk_url');
+    if (!saved || saved === 'https://drive.google.com/' || saved.trim() === '' || saved === '/chronicle-news.apk') {
+      return 'chronicle-news.apk';
+    }
+    return saved;
   });
 
+  const [isApkModalOpen, setIsApkModalOpen] = useState(false);
+
   const updateApkDownloadUrl = (url) => {
-    // If it's a standard Google Drive sharing link, auto-convert to direct download link
-    let finalUrl = url.trim();
-    const driveMatch = finalUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      finalUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    let finalUrl = (url || '').trim();
+    if (!finalUrl) {
+      finalUrl = 'chronicle-news.apk';
+    } else {
+      // If it's a standard Google Drive sharing link, auto-convert to direct download link
+      const driveMatch = finalUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (driveMatch && driveMatch[1]) {
+        finalUrl = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+      }
     }
     setApkDownloadUrl(finalUrl);
     localStorage.setItem('chronicle_apk_url', finalUrl);
   };
 
-  // Initialize DB and Load Data
+  const triggerApkDownload = () => {
+    const link = document.createElement('a');
+    link.href = apkDownloadUrl;
+    link.download = 'ChronicleNews-v1.0.0.apk';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const [isCloudActive, setIsCloudActive] = useState(() => dbService.isCloudActive());
+
+  // Initialize DB and Load Data with instant local rendering
   const loadData = async () => {
     try {
-      setLoading(true);
+      // 1. Immediately seed and load local storage (< 50ms)
       await dbService.seedIfEmpty();
-      const arts = await dbService.getArticles();
-      const vids = await dbService.getVideos();
+      const localArts = await dbService.getLocalArticles();
+      const localVids = await dbService.getLocalVideos();
       
-      // Sort articles and videos by date descending
-      arts.sort((a, b) => new Date(b.date) - new Date(a.date));
-      vids.sort((a, b) => new Date(b.date) - new Date(a.date));
+      localArts.sort((a, b) => new Date(b.date) - new Date(a.date));
+      localVids.sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      setArticles(arts);
-      setVideos(vids);
+      if (localArts.length > 0) setArticles(localArts);
+      if (localVids.length > 0) setVideos(localVids);
+      setIsCloudActive(dbService.isCloudActive());
     } catch (err) {
-      console.error('Error seeding/loading data:', err);
+      console.warn('Error loading initial local cache:', err);
     } finally {
+      // UNLOCK SPLASH SCREEN IMMEDIATELY
       setLoading(false);
+    }
+
+    // 2. Fetch fresh cloud articles in background without blocking UI
+    if (dbService.isCloudActive()) {
+      try {
+        const cloudArts = await dbService.getArticles();
+        if (cloudArts && cloudArts.length > 0) {
+          cloudArts.sort((a, b) => new Date(b.date) - new Date(a.date));
+          setArticles(cloudArts);
+        }
+        const cloudVids = await dbService.getVideos();
+        if (cloudVids && cloudVids.length > 0) {
+          cloudVids.sort((a, b) => new Date(b.date) - new Date(a.date));
+          setVideos(cloudVids);
+        }
+      } catch (cloudErr) {
+        console.warn('Background cloud fetch notice:', cloudErr);
+      }
     }
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+
+    // Setup real-time listeners if Cloud is active
+    let unsubscribeArticles = () => {};
+    let unsubscribeVideos = () => {};
+
+    if (dbService.isCloudActive()) {
+      unsubscribeArticles = dbService.subscribeArticles((cloudArticles) => {
+        cloudArticles.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setArticles(cloudArticles);
+      });
+
+      unsubscribeVideos = dbService.subscribeVideos((cloudVideos) => {
+        cloudVideos.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setVideos(cloudVideos);
+      });
+    }
+
+    return () => {
+      unsubscribeArticles();
+      unsubscribeVideos();
+    };
+  }, [isCloudActive]);
+
+  const saveCloudConfig = (config) => {
+    const ok = dbService.saveCloudConfig(config);
+    if (ok) {
+      setIsCloudActive(dbService.isCloudActive());
+      loadData();
+    }
+    return ok;
+  };
+
+  const clearCloudConfig = () => {
+    dbService.clearCloudConfig();
+    setIsCloudActive(false);
+    loadData();
+  };
+
+  const syncLocalToCloud = async () => {
+    return await dbService.syncLocalToCloud();
+  };
+
+  const testCloudConnection = async (config) => {
+    return await dbService.testCloudConnection(config);
+  };
+
 
   // Navigation Helper
   const navigateTo = (route, activeId = null) => {
@@ -204,7 +291,17 @@ export function AppProvider({ children }) {
       loginAdmin,
       logoutAdmin,
       apkDownloadUrl,
-      updateApkDownloadUrl
+      updateApkDownloadUrl,
+      isApkModalOpen,
+      setIsApkModalOpen,
+      triggerApkDownload,
+      isCloudActive,
+      saveCloudConfig,
+      clearCloudConfig,
+      syncLocalToCloud,
+      testCloudConnection,
+      getCloudConfig: () => dbService.getCloudConfig(),
+      loadData
     }}>
       {children}
     </AppContext.Provider>

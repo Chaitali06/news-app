@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   PlusCircle, Edit3, Trash2, LayoutDashboard, FileText, Video as VideoIcon, 
-  BarChart2, FilePlus, Video, LogOut, Check, AlertCircle, Info, Lock, Smartphone, ExternalLink
+  BarChart2, FilePlus, Video, LogOut, Check, AlertCircle, Info, Lock, Smartphone, ExternalLink,
+  Download, UploadCloud, CheckCircle2, Terminal, Database, Cloud, RefreshCw, Server
 } from 'lucide-react';
 import Modal from '../components/Modal';
 
@@ -20,15 +21,39 @@ export default function AdminDashboard() {
     logoutAdmin,
     navigateTo,
     apkDownloadUrl,
-    updateApkDownloadUrl
+    updateApkDownloadUrl,
+    triggerApkDownload,
+    isCloudActive,
+    saveCloudConfig,
+    clearCloudConfig,
+    syncLocalToCloud,
+    testCloudConnection,
+    getCloudConfig
   } = useApp();
 
   const [apkUrlInput, setApkUrlInput] = useState(apkDownloadUrl || '');
+  const [uploadedApkInfo, setUploadedApkInfo] = useState(null);
+
+  // Cloud Database state
+  const currentCloudCfg = getCloudConfig ? getCloudConfig() : null;
+  const [cloudJsonInput, setCloudJsonInput] = useState(() => {
+    return currentCloudCfg ? JSON.stringify(currentCloudCfg, null, 2) : '';
+  });
+  const [cloudApiKey, setCloudApiKey] = useState(currentCloudCfg?.apiKey || '');
+  const [cloudProjectId, setCloudProjectId] = useState(currentCloudCfg?.projectId || '');
+  const [cloudAuthDomain, setCloudAuthDomain] = useState(currentCloudCfg?.authDomain || '');
+  const [cloudStorageBucket, setCloudStorageBucket] = useState(currentCloudCfg?.storageBucket || '');
+  const [cloudAppId, setCloudAppId] = useState(currentCloudCfg?.appId || '');
+  const [cloudConfigMode, setCloudConfigMode] = useState('json'); // 'json' | 'manual'
+  const [isTestingCloud, setIsTestingCloud] = useState(false);
+  const [cloudTestResult, setCloudTestResult] = useState(null);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
 
   // Authentication states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+
 
   // Dashboard Sub-navigation tabs
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'articles', 'videos', 'new-article', 'new-video'
@@ -107,6 +132,153 @@ export default function AdminDashboard() {
     }
     updateApkDownloadUrl(apkUrlInput);
     triggerAlert('success', 'Android APK download link saved successfully!');
+  };
+
+  const handleResetToLocalApk = () => {
+    updateApkDownloadUrl('/chronicle-news.apk');
+    setApkUrlInput('/chronicle-news.apk');
+    setUploadedApkInfo(null);
+    triggerAlert('success', 'Reset to local hosted APK (/chronicle-news.apk)!');
+  };
+
+  const handleApkFileUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.apk')) {
+      triggerAlert('error', 'Please upload a valid .apk file.');
+      return;
+    }
+    const blobUrl = URL.createObjectURL(file);
+    updateApkDownloadUrl(blobUrl);
+    setApkUrlInput(blobUrl);
+    setUploadedApkInfo({
+      name: file.name,
+      size: (file.size / (1024 * 1024)).toFixed(2) + ' MB'
+    });
+    triggerAlert('success', `Active APK updated to ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)!`);
+  };
+
+  // Helper to parse Cloud Configuration
+  const getActiveFormConfig = () => {
+    if (cloudConfigMode === 'json') {
+      const raw = (cloudJsonInput || '').trim();
+      if (!raw) {
+        throw new Error('Please paste your Firebase configuration snippet into the box.');
+      }
+
+      // Regex extractor: seamlessly handles JS snippets (const firebaseConfig = { apiKey: "..." }), comments, and JSON
+      const extract = (field) => {
+        const regex = new RegExp(`['"]?${field}['"]?\\s*:\\s*['"]([^'"]+)['"]`, 'i');
+        const match = raw.match(regex);
+        return match ? match[1].trim() : '';
+      };
+
+      const apiKey = extract('apiKey');
+      const projectId = extract('projectId');
+      const authDomain = extract('authDomain');
+      const storageBucket = extract('storageBucket');
+      const messagingSenderId = extract('messagingSenderId');
+      const appId = extract('appId');
+      const measurementId = extract('measurementId');
+
+      if (apiKey && projectId) {
+        return {
+          apiKey,
+          projectId,
+          authDomain: authDomain || `${projectId}.firebaseapp.com`,
+          storageBucket: storageBucket || `${projectId}.firebasestorage.app`,
+          messagingSenderId,
+          appId,
+          measurementId
+        };
+      }
+
+      // Fallback JSON.parse
+      try {
+        let clean = raw;
+        if (clean.includes('=')) clean = clean.split('=')[1].trim();
+        if (clean.endsWith(';')) clean = clean.slice(0, -1).trim();
+        const parsed = JSON.parse(clean);
+        if (parsed.apiKey && parsed.projectId) return parsed;
+      } catch (e) {}
+
+      throw new Error('Could not find "apiKey" and "projectId" in the pasted snippet. Please check your text or use the "Manual Fields" tab.');
+    } else {
+      if (!cloudApiKey.trim() || !cloudProjectId.trim()) {
+        throw new Error('API Key and Project ID are required.');
+      }
+      return {
+        apiKey: cloudApiKey.trim(),
+        projectId: cloudProjectId.trim(),
+        authDomain: cloudAuthDomain.trim() || `${cloudProjectId.trim()}.firebaseapp.com`,
+        storageBucket: cloudStorageBucket.trim() || `${cloudProjectId.trim()}.appspot.com`,
+        appId: cloudAppId.trim()
+      };
+    }
+  };
+
+  // Test Cloud DB Connection
+  const handleTestCloud = async () => {
+    try {
+      setIsTestingCloud(true);
+      setCloudTestResult(null);
+      const cfg = getActiveFormConfig();
+      const res = await testCloudConnection(cfg);
+      setCloudTestResult(res);
+      if (res.success) {
+        triggerAlert('success', 'Firebase connection test succeeded!');
+      } else {
+        triggerAlert('error', `Connection test failed: ${res.message}`);
+      }
+    } catch (err) {
+      setCloudTestResult({ success: false, message: err.message });
+      triggerAlert('error', err.message);
+    } finally {
+      setIsTestingCloud(false);
+    }
+  };
+
+  // Save Cloud DB Config
+  const handleSaveCloud = (e) => {
+    if (e) e.preventDefault();
+    try {
+      const cfg = getActiveFormConfig();
+      saveCloudConfig(cfg);
+      triggerAlert('success', `Firebase Cloud Database connected to project "${cfg.projectId}"!`);
+      setCloudTestResult({ success: true, message: `Connected to project "${cfg.projectId}". Real-time sync active!` });
+    } catch (err) {
+      triggerAlert('error', err.message);
+    }
+  };
+
+  // Disconnect Cloud DB
+  const handleClearCloud = () => {
+    clearCloudConfig();
+    setCloudApiKey('');
+    setCloudProjectId('');
+    setCloudAuthDomain('');
+    setCloudStorageBucket('');
+    setCloudAppId('');
+    setCloudJsonInput('');
+    setCloudTestResult(null);
+    triggerAlert('success', 'Disconnected from Firebase. Reverted to local IndexedDB mode.');
+  };
+
+  // Sync Local to Cloud
+  const handleSyncCloud = async () => {
+    if (!isCloudActive) {
+      triggerAlert('error', 'Connect Firebase Firestore before synchronizing.');
+      return;
+    }
+    try {
+      setIsSyncingCloud(true);
+      const res = await syncLocalToCloud();
+      triggerAlert('success', `Synced ${res.uploadedArticles} articles and ${res.uploadedVideos} videos to Firebase Firestore!`);
+    } catch (err) {
+      triggerAlert('error', `Sync failed: ${err.message}`);
+    } finally {
+      setIsSyncingCloud(false);
+    }
   };
 
   // Auth Handler
@@ -385,6 +557,30 @@ export default function AdminDashboard() {
           >
             <PlusCircle size={18} /> Upload Video Report
           </button>
+
+          <div className="nav-divider"></div>
+
+          <button 
+            className={`admin-nav-tab ${activeTab === 'cloud-db' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cloud-db')}
+            style={{
+              borderColor: isCloudActive ? 'rgba(74, 222, 128, 0.3)' : 'rgba(245, 158, 11, 0.2)',
+              background: isCloudActive ? 'rgba(74, 222, 128, 0.05)' : 'rgba(245, 158, 11, 0.04)'
+            }}
+          >
+            <Database size={18} style={{ color: isCloudActive ? '#4ade80' : '#f59e0b' }} /> Cloud Database
+            <span 
+              title={isCloudActive ? 'Firebase Firestore Active' : 'IndexedDB Local Mode'}
+              style={{ 
+                marginLeft: 'auto', 
+                width: 8, 
+                height: 8, 
+                borderRadius: '50%', 
+                background: isCloudActive ? '#4ade80' : '#f59e0b',
+                boxShadow: isCloudActive ? '0 0 8px #4ade80' : 'none'
+              }} 
+            />
+          </button>
         </aside>
 
         {/* Right Column: Active Tab Workspace */}
@@ -454,42 +650,89 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Google Drive APK Download Link Card */}
-                <div className="overview-sub-card glass-card" style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <Smartphone size={20} style={{ color: '#4ade80' }} />
-                    <h3 style={{ margin: 0 }}>Android App (APK) Download Link</h3>
+                {/* Complete Android APK Manager Card */}
+                <div className="overview-sub-card glass-card apk-admin-manager-card" style={{ flex: 1.2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Smartphone size={20} style={{ color: '#4ade80' }} />
+                      <h3 style={{ margin: 0 }}>Android APK & Browser Downloads</h3>
+                    </div>
+                    <span className="apk-source-badge">
+                      {apkDownloadUrl === '/chronicle-news.apk' ? '🟢 Local Web Server APK' : uploadedApkInfo ? '🟣 Uploaded Session APK' : '🔵 External Cloud Link'}
+                    </span>
                   </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    Paste your Google Drive link or hosted APK file link below. Google Drive sharing links will be automatically converted to 1-click direct download links.
+
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                    Manage how mobile readers download the Chronicle News Android app directly in their browser.
                   </p>
-                  
-                  <form onSubmit={handleSaveApkLink} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                  {/* Test Download & Quick Reset Action */}
+                  <div className="apk-quick-actions-bar">
+                    <button 
+                      type="button" 
+                      onClick={triggerApkDownload}
+                      className="apk-admin-btn primary"
+                      title="Download the current active APK in this browser"
+                    >
+                      <Download size={14} /> Test Browser Download
+                    </button>
+                    {apkDownloadUrl !== '/chronicle-news.apk' && (
+                      <button 
+                        type="button" 
+                        onClick={handleResetToLocalApk}
+                        className="apk-admin-btn secondary"
+                        title="Revert to /chronicle-news.apk"
+                      >
+                        Reset to /chronicle-news.apk
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Option A: Upload New APK File */}
+                  <div className="apk-upload-box">
+                    <label className="apk-input-label">
+                      <UploadCloud size={14} /> Upload Updated .apk File from Computer
+                    </label>
                     <input 
-                      type="url"
-                      value={apkUrlInput}
-                      onChange={(e) => setApkUrlInput(e.target.value)}
-                      placeholder="https://drive.google.com/file/d/..."
-                      className="text-input-styled"
-                      style={{ width: '100%' }}
-                      required
+                      type="file" 
+                      accept=".apk"
+                      onChange={handleApkFileUpload}
+                      className="apk-file-input"
                     />
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <button type="submit" className="action-btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
+                    {uploadedApkInfo && (
+                      <div className="apk-upload-success">
+                        <CheckCircle2 size={14} color="#4ade80" />
+                        <span>Active file: {uploadedApkInfo.name} ({uploadedApkInfo.size})</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Option B: External or Custom Hosted URL */}
+                  <div className="apk-url-override-box">
+                    <label className="apk-input-label">
+                      Or Set Custom URL (Google Drive, GitHub Release, CDN)
+                    </label>
+                    <form onSubmit={handleSaveApkLink} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <input 
+                        type="text"
+                        value={apkUrlInput}
+                        onChange={(e) => setApkUrlInput(e.target.value)}
+                        placeholder="/chronicle-news.apk or https://drive.google.com/..."
+                        className="text-input-styled"
+                        style={{ flex: 1, minWidth: '200px' }}
+                        required
+                      />
+                      <button type="submit" className="action-btn-primary" style={{ padding: '8px 14px', fontSize: '0.85rem' }}>
                         Save Link
                       </button>
-                      {apkDownloadUrl && (
-                        <a 
-                          href={apkDownloadUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ fontSize: '0.85rem', color: '#60a5fa', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                        >
-                          Test Link <ExternalLink size={14} />
-                        </a>
-                      )}
-                    </div>
-                  </form>
+                    </form>
+                  </div>
+
+                  {/* Helper footer */}
+                  <div className="apk-build-tips">
+                    <Terminal size={13} style={{ color: '#94a3b8' }} />
+                    <span>To re-compile APK: Run <code>build-apk.bat</code> or push to GitHub for automated CI.</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -850,6 +1093,253 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Tab F: Cloud Database (Firebase Firestore) Management */}
+          {activeTab === 'cloud-db' && (
+            <div className="tab-pane-content animate-fade-in">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h2 className="workspace-pane-title" style={{ margin: 0 }}>Cloud Database & Cross-Device Sync</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
+                    Connect Google Firebase Firestore to instantly sync articles and videos between your Web portal and Android APK.
+                  </p>
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  background: isCloudActive ? 'rgba(74, 222, 128, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                  color: isCloudActive ? '#4ade80' : '#f59e0b',
+                  border: isCloudActive ? '1px solid rgba(74, 222, 128, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)'
+                }}>
+                  <span style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: isCloudActive ? '#4ade80' : '#f59e0b',
+                    boxShadow: isCloudActive ? '0 0 8px #4ade80' : 'none'
+                  }} />
+                  {isCloudActive ? `Firebase Firestore Active (${cloudProjectId || 'Connected'})` : 'Local IndexedDB (Offline Mode)'}
+                </div>
+              </div>
+
+              {/* Status & Migration Banner */}
+              <div className="glass-card" style={{ padding: '20px', marginBottom: '24px', borderLeft: `4px solid ${isCloudActive ? '#4ade80' : '#f59e0b'}` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                  <div style={{ flex: 1, minWidth: '280px' }}>
+                    <h3 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {isCloudActive ? <Cloud size={20} color="#4ade80" /> : <Server size={20} color="#f59e0b" />}
+                      {isCloudActive ? 'Live Real-Time Cloud Sync Active' : 'Operating in Local Storage Mode'}
+                    </h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0, lineHeight: 1.5 }}>
+                      {isCloudActive 
+                        ? 'All updates made in this dashboard instantly broadcast via WebSockets/Firestore to all readers browsing the website and all users running the Android APK.' 
+                        : 'Articles are currently saved only to this browser’s IndexedDB. Connect Firebase Firestore below to enable public distribution and mobile device syncing.'}
+                    </p>
+                  </div>
+
+                  {isCloudActive ? (
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleSyncCloud}
+                        disabled={isSyncingCloud}
+                        className="btn btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <RefreshCw size={15} className={isSyncingCloud ? 'animate-spin' : ''} />
+                        {isSyncingCloud ? 'Uploading to Cloud...' : 'Sync Local Content to Cloud'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearCloud}
+                        className="btn btn-secondary"
+                        style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#f87171' }}
+                      >
+                        Disconnect Cloud
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Configuration Section */}
+              <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Database size={18} color="var(--accent-blue)" /> Firebase Connection Credentials
+                  </h3>
+                  
+                  {/* Mode Toggle */}
+                  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '3px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setCloudConfigMode('json')}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        background: cloudConfigMode === 'json' ? 'var(--accent-blue)' : 'transparent',
+                        color: cloudConfigMode === 'json' ? '#000' : 'var(--text-muted)'
+                      }}
+                    >
+                      Paste Config JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCloudConfigMode('manual')}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        background: cloudConfigMode === 'manual' ? 'var(--accent-blue)' : 'transparent',
+                        color: cloudConfigMode === 'manual' ? '#000' : 'var(--text-muted)'
+                      }}
+                    >
+                      Manual Fields
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveCloud}>
+                  {cloudConfigMode === 'json' ? (
+                    <div className="input-group" style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Firebase Config Snippet (from Firebase Console)</span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Auto-strips variable declarations</span>
+                      </label>
+                      <textarea
+                        rows={7}
+                        value={cloudJsonInput}
+                        onChange={(e) => setCloudJsonInput(e.target.value)}
+                        placeholder={`{\n  "apiKey": "AIzaSy...",\n  "authDomain": "my-news-app.firebaseapp.com",\n  "projectId": "my-news-app",\n  "storageBucket": "my-news-app.appspot.com",\n  "messagingSenderId": "...",\n  "appId": "..."\n}`}
+                        className="text-input-styled"
+                        style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+                      <div className="input-group">
+                        <label>Firebase API Key *</label>
+                        <input
+                          type="text"
+                          value={cloudApiKey}
+                          onChange={(e) => setCloudApiKey(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="text-input-styled"
+                          required
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label>Project ID *</label>
+                        <input
+                          type="text"
+                          value={cloudProjectId}
+                          onChange={(e) => setCloudProjectId(e.target.value)}
+                          placeholder="chronicle-news-12345"
+                          className="text-input-styled"
+                          required
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label>Auth Domain</label>
+                        <input
+                          type="text"
+                          value={cloudAuthDomain}
+                          onChange={(e) => setCloudAuthDomain(e.target.value)}
+                          placeholder="chronicle-news.firebaseapp.com"
+                          className="text-input-styled"
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label>Storage Bucket</label>
+                        <input
+                          type="text"
+                          value={cloudStorageBucket}
+                          onChange={(e) => setCloudStorageBucket(e.target.value)}
+                          placeholder="chronicle-news.appspot.com"
+                          className="text-input-styled"
+                        />
+                      </div>
+                      <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                        <label>App ID (Optional)</label>
+                        <input
+                          type="text"
+                          value={cloudAppId}
+                          onChange={(e) => setCloudAppId(e.target.value)}
+                          placeholder="1:123456789012:web:abcdef123456"
+                          className="text-input-styled"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Test Feedback Message */}
+                  {cloudTestResult && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.88rem',
+                      background: cloudTestResult.success ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: cloudTestResult.success ? '#4ade80' : '#f87171',
+                      border: cloudTestResult.success ? '1px solid rgba(74, 222, 128, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                    }}>
+                      {cloudTestResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      <span>{cloudTestResult.message}</span>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={handleTestCloud}
+                      disabled={isTestingCloud}
+                      className="btn btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <RefreshCw size={14} className={isTestingCloud ? 'animate-spin' : ''} />
+                      {isTestingCloud ? 'Testing...' : 'Test Connection'}
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                    >
+                      Save & Connect Firebase
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* 3-Minute Setup Guide */}
+              <div className="glass-card" style={{ padding: '20px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Info size={16} color="var(--accent-blue)" /> Quick Guide: How to Get Free Firebase Keys in 3 Minutes
+                </h3>
+                <ol style={{ margin: 0, paddingLeft: '20px', color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.8 }}>
+                  <li>Go to Google's free console at <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>console.firebase.google.com</a> and click <strong>Add project</strong>.</li>
+                  <li>In the sidebar, open <strong>Build &rarr; Firestore Database</strong>, click <strong>Create database</strong>, and choose <strong>Start in test mode</strong>.</li>
+                  <li>Click the gear icon next to Project Overview &rarr; <strong>Project settings</strong>. Scroll down to <strong>Your apps</strong> and click the <strong>Web (&lt;/&gt;)</strong> icon.</li>
+                  <li>Copy the generated <code>firebaseConfig</code> code snippet, paste it into the box above, and click <strong>Save & Connect Firebase</strong>.</li>
+                </ol>
+              </div>
             </div>
           )}
 
