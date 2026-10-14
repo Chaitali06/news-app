@@ -15,8 +15,11 @@ export default function AdminDashboard() {
     editArticle,
     removeArticle,
     createVideo,
+    editVideo,
     removeVideo,
     adminUser,
+    adminTargetArticle,
+    setAdminTargetArticle,
     loginAdmin,
     logoutAdmin,
     navigateTo,
@@ -77,6 +80,8 @@ export default function AdminDashboard() {
   const [artBody, setArtBody] = useState('');
 
   // Form states for New Video
+  const [isEditingVideo, setIsEditingVideo] = useState(false);
+  const [editingVideoId, setEditingVideoId] = useState(null);
   const [vidTitle, setVidTitle] = useState('');
   const [vidDescription, setVidDescription] = useState('');
   const [vidCategory, setVidCategory] = useState('politics');
@@ -85,6 +90,40 @@ export default function AdminDashboard() {
   const [vidThumbFile, setVidThumbFile] = useState(null);
   const [vidVideoUrl, setVidVideoUrl] = useState('');
   const [vidVideoFile, setVidVideoFile] = useState(null);
+
+  // Client-side image compression for Android WebView / mobile gallery uploads (prevents Firestore 1MB rejection)
+  const compressImageFile = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1200;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
 
   // Stats Counters
   const [totalViews, setTotalViews] = useState(0);
@@ -108,6 +147,13 @@ export default function AdminDashboard() {
     });
     setTotalComments(commentsCount);
   }, [articles, videos]);
+
+  useEffect(() => {
+    if (adminTargetArticle) {
+      loadArticleForEditing(adminTargetArticle);
+      if (setAdminTargetArticle) setAdminTargetArticle(null);
+    }
+  }, [adminTargetArticle]);
 
   // Clean date formatter
   const formatDate = (isoString) => {
@@ -321,13 +367,9 @@ export default function AdminDashboard() {
     try {
       let finalImgUrl = artImageUrl || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80';
 
-      // Read image file as Base64 if uploaded
+      // Compress and convert image if file uploaded from mobile gallery/camera
       if (artImageFile) {
-        finalImgUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(artImageFile);
-        });
+        finalImgUrl = await compressImageFile(artImageFile);
       }
 
       const payload = {
@@ -380,27 +422,34 @@ export default function AdminDashboard() {
     setActiveTab('new-article');
   };
 
-  // Form Submission: Upload Video
+  const loadVideoForEditing = (vid) => {
+    setIsEditingVideo(true);
+    setEditingVideoId(vid.id);
+    setVidTitle(vid.title);
+    setVidDescription(vid.description || '');
+    setVidCategory(vid.category || 'politics');
+    setVidAuthor(vid.author || '');
+    setVidThumbUrl(vid.thumbnailUrl || '');
+    setVidThumbFile(null);
+    setVidVideoUrl(vid.videoUrl || '');
+    setVidVideoFile(null);
+    setActiveTab('new-video');
+  };
+
+  // Form Submission: Upload / Edit Video
   const handleVideoSubmit = async (e) => {
     e.preventDefault();
     try {
       let finalThumbUrl = vidThumbUrl || 'https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=800&q=80';
       let finalVideoUrl = vidVideoUrl;
 
-      // Read thumbnail file as Base64 if uploaded
+      // Compress and convert thumbnail if uploaded
       if (vidThumbFile) {
-        finalThumbUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(vidThumbFile);
-        });
+        finalThumbUrl = await compressImageFile(vidThumbFile);
       }
 
       // Handle raw video file upload
       if (vidVideoFile) {
-        // We create an Object URL to play local file instantly, 
-        // and store it as a raw Blob if we had a persistent Blob store,
-        // but for lightweight local demonstration we can generate a local Object URL
         finalVideoUrl = URL.createObjectURL(vidVideoFile);
       }
 
@@ -416,20 +465,27 @@ export default function AdminDashboard() {
         author: vidAuthor,
         thumbnailUrl: finalThumbUrl,
         videoUrl: finalVideoUrl,
-        duration: '0:15' // default mock duration
+        duration: '0:15'
       };
 
-      await createVideo(payload);
-      triggerAlert('success', 'Video uploaded successfully.');
+      if (isEditingVideo) {
+        await editVideo(editingVideoId, payload);
+        triggerAlert('success', 'Video updated successfully.');
+      } else {
+        await createVideo(payload);
+        triggerAlert('success', 'Video uploaded successfully.');
+      }
       
       resetVideoForm();
       setActiveTab('videos');
     } catch (err) {
-      triggerAlert('error', `Video upload failed: ${err.message}`);
+      triggerAlert('error', `Video operation failed: ${err.message}`);
     }
   };
 
   const resetVideoForm = () => {
+    setIsEditingVideo(false);
+    setEditingVideoId(null);
     setVidTitle('');
     setVidDescription('');
     setVidCategory('politics');
@@ -840,6 +896,13 @@ export default function AdminDashboard() {
                           <td>
                             <div className="table-actions-cell">
                               <button 
+                                className="table-action-btn edit" 
+                                onClick={() => loadVideoForEditing(vid)}
+                                title="Edit Video"
+                              >
+                                <Edit3 size={16} />
+                              </button>
+                              <button 
                                 className="table-action-btn delete" 
                                 onClick={() => openDeleteConfirm('video', vid.id)}
                                 title="Delete Video"
@@ -970,10 +1033,12 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Tab E: Upload Video Report Form */}
+          {/* Tab E: Upload / Edit Video Report Form */}
           {activeTab === 'new-video' && (
             <div className="tab-pane-content animate-fade-in">
-              <h2 className="workspace-pane-title">Upload News Video Report</h2>
+              <h2 className="workspace-pane-title">
+                {isEditingVideo ? `Edit Video: "${vidTitle.substring(0,25)}..."` : 'Upload News Video Report'}
+              </h2>
 
               <form onSubmit={handleVideoSubmit} className="editor-form glass-card">
                 <div className="form-row-double">
@@ -1089,7 +1154,7 @@ export default function AdminDashboard() {
                     Clear Form
                   </button>
                   <button type="submit" className="btn btn-primary">
-                    Publish Video Report
+                    {isEditingVideo ? 'Save Changes' : 'Publish Video Report'}
                   </button>
                 </div>
               </form>

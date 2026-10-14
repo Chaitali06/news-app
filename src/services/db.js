@@ -148,13 +148,25 @@ export const dbService = {
         const q = query(collection(firestore, 'articles'));
         return onSnapshot(
           q,
-          (snapshot) => {
+          async (snapshot) => {
             const list = [];
+            const cloudIds = new Set();
             snapshot.forEach((doc) => {
-              list.push({ id: doc.id, ...doc.data() });
+              const data = { id: doc.id, ...doc.data() };
+              list.push(data);
+              cloudIds.add(doc.id);
             });
             // Update local IndexedDB cache in background
             list.forEach((art) => localDB.addArticle(art).catch(() => {}));
+            // Clean up locally deleted items that are no longer in Firestore
+            if (cloudIds.size > 0) {
+              const localArticles = await localDB.getArticles().catch(() => []);
+              for (const loc of localArticles) {
+                if (!cloudIds.has(loc.id)) {
+                  await localDB.deleteArticle(loc.id).catch(() => {});
+                }
+              }
+            }
             onUpdate(list);
           },
           (error) => {
@@ -177,13 +189,24 @@ export const dbService = {
         const q = query(collection(firestore, 'videos'));
         return onSnapshot(
           q,
-          (snapshot) => {
+          async (snapshot) => {
             const list = [];
+            const cloudIds = new Set();
             snapshot.forEach((doc) => {
-              list.push({ id: doc.id, ...doc.data() });
+              const data = { id: doc.id, ...doc.data() };
+              list.push(data);
+              cloudIds.add(doc.id);
             });
             // Update local IndexedDB cache in background
             list.forEach((vid) => localDB.addVideo(vid).catch(() => {}));
+            if (cloudIds.size > 0) {
+              const localVideos = await localDB.getVideos().catch(() => []);
+              for (const loc of localVideos) {
+                if (!cloudIds.has(loc.id)) {
+                  await localDB.deleteVideo(loc.id).catch(() => {});
+                }
+              }
+            }
             onUpdate(list);
           },
           (error) => {
@@ -298,6 +321,10 @@ export const dbService = {
     return video;
   },
 
+  async updateVideo(video) {
+    return this.addVideo(video);
+  },
+
   async deleteVideo(id) {
     await localDB.deleteVideo(id);
 
@@ -338,8 +365,19 @@ export const dbService = {
 
   // Database Seed Mock Data
   async seedIfEmpty() {
+    // Respect user deletions: only seed if the database has NEVER been initialized
+    const alreadySeeded = localStorage.getItem('chronicle_db_seeded');
+    if (alreadySeeded) {
+      return;
+    }
+
     const existingArticles = await localDB.getArticles();
-    const existingArtIds = new Set(existingArticles.map(a => a.id));
+    const existingVideos = await localDB.getVideos();
+
+    if (existingArticles.length > 0 || existingVideos.length > 0) {
+      localStorage.setItem('chronicle_db_seeded', 'true');
+      return;
+    }
 
     const mockArticles = [
       {
@@ -424,80 +462,14 @@ While biotech remains a capital-intensive sector with high regulatory risks (FDA
     ];
 
     for (const art of mockArticles) {
-      if (!existingArtIds.has(art.id)) {
-        await localDB.addArticle(art);
-      }
+      await localDB.addArticle(art);
     }
-
-    const existingVideos = await localDB.getVideos();
-    const existingVidIds = new Set(existingVideos.map(v => v.id));
-
-    const mockVideos = [
-      {
-        id: 'vid-1',
-        title: 'Special Report: The Global Green Hydrogen Logistics Race',
-        description: 'A deep-dive investigation into the infrastructure required to replace coal and gas pipelines with clean green hydrogen, focusing on the newly signed Geneva Accord.',
-        category: 'world',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=800&q=80',
-        author: 'Chronicle Investigative Team',
-        date: '2026-08-24T09:30:00Z',
-        views: 4500,
-        duration: '0:15'
-      },
-      {
-        id: 'vid-2',
-        title: 'Chronicle Tech Tour: Inside the Geneva Silicon Qubit Lab',
-        description: 'Our tech editors tour the research labs that achieved room-temperature quantum calculations. We interview Dr. Elena Rostova and watch the system run.',
-        category: 'tech',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-        author: 'Sarah Jenkins',
-        date: '2026-08-23T15:00:00Z',
-        views: 9200,
-        duration: '0:15'
-      },
-      {
-        id: 'vid-3',
-        title: 'Aether Void Official GDS Cinematic Showcase',
-        description: 'Catch the gameplay trailer of Aether Void, the voxel space detective adventure that shocked the gaming world by sweeping the GDS Awards.',
-        category: 'entertainment',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-        thumbnailUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-        author: 'GDS Editorial',
-        date: '2026-08-22T19:00:00Z',
-        views: 15400,
-        duration: '12:14'
-      }
-    ];
 
     for (const vid of mockVideos) {
-      if (!existingVidIds.has(vid.id)) {
-        await localDB.addVideo(vid);
-      }
+      await localDB.addVideo(vid);
     }
 
-    // Auto-seed Firestore in background if Cloud is active and empty/incomplete
-    const firestore = getFirestoreDb();
-    if (firestore && isFirebaseConfigured()) {
-      getDocs(collection(firestore, 'articles')).then(async (snap) => {
-        if (snap.size < 4) {
-          const allLocal = await localDB.getArticles();
-          for (const art of allLocal) {
-            await setDoc(doc(firestore, 'articles', String(art.id)), art).catch(() => {});
-          }
-        }
-      }).catch(() => {});
-
-      getDocs(collection(firestore, 'videos')).then(async (snap) => {
-        if (snap.size < 3) {
-          const allLocalVids = await localDB.getVideos();
-          for (const vid of allLocalVids) {
-            await setDoc(doc(firestore, 'videos', String(vid.id)), vid).catch(() => {});
-          }
-        }
-      }).catch(() => {});
-    }
+    localStorage.setItem('chronicle_db_seeded', 'true');
   }
 };
 

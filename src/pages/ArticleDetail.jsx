@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Clock, Calendar, Eye, Share2, Send, MessageSquare, Type } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, Eye, Share2, Send, MessageSquare, Type, Edit3, Trash2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import Modal from '../components/Modal';
 
 export default function ArticleDetail() {
   const {
     activeArticleId,
     articles,
-    navigateTo
+    navigateTo,
+    removeArticle,
+    adminUser,
+    setAdminTargetArticle
   } = useApp();
 
   const [serifFont, setSerifFont] = useState(false);
@@ -14,6 +18,8 @@ export default function ArticleDetail() {
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([]);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Retrieve matching article
   const article = articles.find((a) => a.id === activeArticleId);
@@ -99,6 +105,20 @@ export default function ArticleDetail() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // Direct Article Delete action for Admin
+  const handleDeleteArticle = async () => {
+    try {
+      setIsDeleting(true);
+      await removeArticle(article.id);
+      navigateTo('home');
+    } catch (err) {
+      alert('Delete failed: ' + (err.message || err));
+    } finally {
+      setIsDeleting(false);
+      setIsConfirmingDelete(false);
+    }
+  };
+
   return (
     <div className="article-detail-container animate-fade-in">
       {/* 1. Header Toolbar */}
@@ -140,6 +160,80 @@ export default function ArticleDetail() {
           </div>
         </div>
       </div>
+
+      {/* Admin Action Bar (CRUD: Edit & Delete story directly) */}
+      {adminUser ? (
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', marginBottom: '16px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)', background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.25), rgba(15, 23, 42, 0.5))', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldCheck size={18} color="#60a5fa" />
+            <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#e2e8f0' }}>
+              Admin Controls ({adminUser.name})
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '6px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => {
+                setAdminTargetArticle(article);
+                navigateTo('admin');
+              }}
+            >
+              <Edit3 size={15} /> Edit Article
+            </button>
+            <button 
+              className="btn btn-danger" 
+              style={{ padding: '6px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => setIsConfirmingDelete(true)}
+            >
+              <Trash2 size={15} /> Delete Article
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+          <button 
+            type="button" 
+            onClick={() => navigateTo('admin')}
+            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+          >
+            <ShieldCheck size={13} /> News Editor Login (to Edit or Delete stories)
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal 
+        isOpen={isConfirmingDelete} 
+        onClose={() => setIsConfirmingDelete(false)} 
+        title="Confirm Delete Article"
+      >
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', color: '#f87171' }}>
+            <AlertTriangle size={24} />
+            <span style={{ fontSize: '1rem', fontWeight: 600 }}>Permanent Deletion</span>
+          </div>
+          <p style={{ color: '#cbd5e1', marginBottom: '20px', lineHeight: 1.5 }}>
+            Are you sure you want to delete <strong>"{article.title}"</strong>? This will permanently remove the article from local and cloud storage.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setIsConfirmingDelete(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </button>
+            <button 
+              className="btn btn-danger" 
+              onClick={handleDeleteArticle}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <div className="detail-main-layout">
         {/* Left Column: Article Reading Panel */}

@@ -18,6 +18,7 @@ export function AppProvider({ children }) {
     const saved = localStorage.getItem('chronicle_admin_user');
     return saved ? JSON.parse(saved) : null;
   });
+  const [adminTargetArticle, setAdminTargetArticle] = useState(null);
 
   // Android APK Download URL (Defaults to local hosted APK, supports external links)
   const [apkDownloadUrl, setApkDownloadUrl] = useState(() => {
@@ -250,6 +251,17 @@ export function AppProvider({ children }) {
     setVideos(prev => prev.filter(v => v.id !== id));
   };
 
+  const editVideo = async (id, updatedFields) => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return;
+    const updated = {
+      ...video,
+      ...updatedFields
+    };
+    await dbService.updateVideo(updated);
+    setVideos(prev => prev.map(v => v.id === id ? updated : v));
+  };
+
   // Admin Authentication Actions
   const loginAdmin = (username, password) => {
     if (username === 'admin' && password === 'admin123') {
@@ -282,11 +294,14 @@ export function AppProvider({ children }) {
       activeCategory,
       setActiveCategory,
       adminUser,
+      adminTargetArticle,
+      setAdminTargetArticle,
       navigateTo,
       createArticle,
       editArticle,
       removeArticle,
       createVideo,
+      editVideo,
       removeVideo,
       loginAdmin,
       logoutAdmin,
