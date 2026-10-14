@@ -190,17 +190,7 @@ export default function ArticleDetail() {
             </button>
           </div>
         </div>
-      ) : (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-          <button 
-            type="button" 
-            onClick={() => navigateTo('admin')}
-            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-          >
-            <ShieldCheck size={13} /> News Editor Login (to Edit or Delete stories)
-          </button>
-        </div>
-      )}
+      ) : null}
 
       {/* Delete Confirmation Modal */}
       <Modal 

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Search, Radio, User, LogOut, Menu, X, BookOpen, Video, PlusCircle, Smartphone } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 export default function Navigation() {
+  const isNative = Capacitor.isNativePlatform();
   const {
     currentRoute,
     navigateTo,
@@ -75,36 +77,40 @@ export default function Navigation() {
             <Video size={16} /> Video Hub
           </button>
 
-          {/* Download App (APK) */}
-          <button 
-            type="button"
-            onClick={() => setIsApkModalOpen(true)}
-            className="nav-link apk-download-nav-btn"
-            title="Download Android APK"
-          >
-            <Smartphone size={16} className="apk-icon-bounce" />
-            <span>Download APK</span>
-          </button>
+          {/* Download App (APK) - Hidden inside native mobile app */}
+          {!isNative && (
+            <button 
+              type="button"
+              onClick={() => setIsApkModalOpen(true)}
+              className="nav-link apk-download-nav-btn"
+              title="Download Android APK"
+            >
+              <Smartphone size={16} className="apk-icon-bounce" />
+              <span>Download APK</span>
+            </button>
+          )}
 
-          {adminUser ? (
-            <div className="admin-status-nav">
+          {!isNative && (
+            adminUser ? (
+              <div className="admin-status-nav">
+                <button 
+                  className={`nav-link admin-btn ${currentRoute === 'admin' ? 'active' : ''}`}
+                  onClick={() => navigateTo('admin')}
+                >
+                  <PlusCircle size={16} /> Admin Panel
+                </button>
+                <button className="logout-icon-btn" onClick={logoutAdmin} title="Sign Out">
+                  <LogOut size={16} />
+                </button>
+              </div>
+            ) : (
               <button 
-                className={`nav-link admin-btn ${currentRoute === 'admin' ? 'active' : ''}`}
+                className={`nav-link login-btn ${currentRoute === 'admin' ? 'active' : ''}`}
                 onClick={() => navigateTo('admin')}
               >
-                <PlusCircle size={16} /> Admin Panel
+                <User size={16} /> Admin Access
               </button>
-              <button className="logout-icon-btn" onClick={logoutAdmin} title="Sign Out">
-                <LogOut size={16} />
-              </button>
-            </div>
-          ) : (
-            <button 
-              className={`nav-link login-btn ${currentRoute === 'admin' ? 'active' : ''}`}
-              onClick={() => navigateTo('admin')}
-            >
-              <User size={16} /> Admin Access
-            </button>
+            )
           )}
         </nav>
 
@@ -163,14 +169,6 @@ export default function Navigation() {
             >
               <Video size={18} /> Video Hub
             </button>
-
-            <button 
-              type="button"
-              className="mobile-drawer-link mobile-apk-link"
-              onClick={() => { setIsApkModalOpen(true); setMobileMenuOpen(false); }}
-            >
-              <Smartphone size={18} /> Download Android App (APK)
-            </button>
             
             <div className="drawer-divider"></div>
             
@@ -187,32 +185,6 @@ export default function Navigation() {
                 </button>
               ))}
             </div>
-
-            <div className="drawer-divider"></div>
-
-            {adminUser ? (
-              <div className="mobile-admin-block">
-                <button 
-                  className="mobile-drawer-link admin-btn"
-                  onClick={() => { navigateTo('admin'); setMobileMenuOpen(false); }}
-                >
-                  <PlusCircle size={18} /> Admin Dashboard
-                </button>
-                <button 
-                  className="mobile-drawer-link logout-btn"
-                  onClick={() => { logoutAdmin(); setMobileMenuOpen(false); }}
-                >
-                  <LogOut size={18} /> Sign Out ({adminUser.username})
-                </button>
-              </div>
-            ) : (
-              <button 
-                className="mobile-drawer-link login-btn"
-                onClick={() => { navigateTo('admin'); setMobileMenuOpen(false); }}
-              >
-                <User size={18} /> Admin Access
-              </button>
-            )}
           </div>
         </div>
       )}

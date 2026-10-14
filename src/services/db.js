@@ -1,20 +1,20 @@
-import { 
-  getFirestoreDb, 
-  isFirebaseConfigured, 
-  saveFirebaseConfig, 
-  clearFirebaseConfig, 
-  testFirebaseConnection, 
-  getFirebaseConfig 
+import {
+  getFirestoreDb,
+  isFirebaseConfigured,
+  saveFirebaseConfig,
+  clearFirebaseConfig,
+  testFirebaseConnection,
+  getFirebaseConfig
 } from './firebase';
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  orderBy 
+import {
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy
 } from 'firebase/firestore';
 
 const DB_NAME = 'ChronicleNewsDB';
@@ -37,7 +37,7 @@ export function initDB() {
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
-      
+
       // Store for articles
       if (!db.objectStoreNames.contains('articles')) {
         db.createObjectStore('articles', { keyPath: 'id' });
@@ -157,13 +157,13 @@ export const dbService = {
               cloudIds.add(doc.id);
             });
             // Update local IndexedDB cache in background
-            list.forEach((art) => localDB.addArticle(art).catch(() => {}));
+            list.forEach((art) => localDB.addArticle(art).catch(() => { }));
             // Clean up locally deleted items that are no longer in Firestore
             if (cloudIds.size > 0) {
               const localArticles = await localDB.getArticles().catch(() => []);
               for (const loc of localArticles) {
                 if (!cloudIds.has(loc.id)) {
-                  await localDB.deleteArticle(loc.id).catch(() => {});
+                  await localDB.deleteArticle(loc.id).catch(() => { });
                 }
               }
             }
@@ -178,7 +178,7 @@ export const dbService = {
         console.warn('Could not establish Firestore subscription:', e);
       }
     }
-    return () => {};
+    return () => { };
   },
 
   // Real-time videos listener
@@ -198,12 +198,12 @@ export const dbService = {
               cloudIds.add(doc.id);
             });
             // Update local IndexedDB cache in background
-            list.forEach((vid) => localDB.addVideo(vid).catch(() => {}));
+            list.forEach((vid) => localDB.addVideo(vid).catch(() => { }));
             if (cloudIds.size > 0) {
               const localVideos = await localDB.getVideos().catch(() => []);
               for (const loc of localVideos) {
                 if (!cloudIds.has(loc.id)) {
-                  await localDB.deleteVideo(loc.id).catch(() => {});
+                  await localDB.deleteVideo(loc.id).catch(() => { });
                 }
               }
             }
@@ -218,7 +218,7 @@ export const dbService = {
         console.warn('Could not establish Firestore subscription:', e);
       }
     }
-    return () => {};
+    return () => { };
   },
 
   getLocalArticles() {
@@ -235,7 +235,7 @@ export const dbService = {
     if (firestore && isFirebaseConfigured()) {
       try {
         const fetchPromise = getDocs(collection(firestore, 'articles'));
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Firestore read timeout')), 2500)
         );
         const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
@@ -245,7 +245,7 @@ export const dbService = {
         });
         if (cloudArticles.length > 0) {
           // Cache to IndexedDB in background
-          cloudArticles.forEach((art) => localDB.addArticle(art).catch(() => {}));
+          cloudArticles.forEach((art) => localDB.addArticle(art).catch(() => { }));
           return cloudArticles;
         }
       } catch (err) {
@@ -290,7 +290,7 @@ export const dbService = {
     if (firestore && isFirebaseConfigured()) {
       try {
         const fetchPromise = getDocs(collection(firestore, 'videos'));
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Firestore read timeout')), 2500)
         );
         const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
@@ -299,7 +299,7 @@ export const dbService = {
           cloudVideos.push({ id: doc.id, ...doc.data() });
         });
         if (cloudVideos.length > 0) {
-          cloudVideos.forEach((vid) => localDB.addVideo(vid).catch(() => {}));
+          cloudVideos.forEach((vid) => localDB.addVideo(vid).catch(() => { }));
           return cloudVideos;
         }
       } catch (err) {
